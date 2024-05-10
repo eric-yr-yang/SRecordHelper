@@ -13,97 +13,9 @@ namespace SRecordHelper;
 /// </summary>
 public class SRecordFile
 {
-    #region 定义
     /// <summary>
-    /// 档案块
+    /// 
     /// </summary>
-    public class RecordBlock
-    {
-        /// <summary>
-        /// 起始地址
-        /// </summary>
-        public uint StartAddressValue { get; set; }
-
-        /// <summary>
-        /// 起始地址
-        /// </summary>
-        public byte[] StartAddress => BitConverter.GetBytes(StartAddressValue).Reverse().ToArray();
-
-        /// <summary>
-        /// 下一个内容地址
-        /// </summary>
-        public uint NextAddressValue => (uint)(StartAddressValue + Data.Count);
-
-        /// <summary>
-        /// 下一个内容地址
-        /// </summary>
-        public byte[] NextAddress => BitConverter.GetBytes(NextAddressValue).Reverse().ToArray();
-
-        /// <summary>
-        /// 结束地址
-        /// </summary>
-        public uint EndAddressValue => NextAddressValue - 1;
-
-        /// <summary>
-        /// 结束地址
-        /// </summary>
-        public byte[] EndAddress => BitConverter.GetBytes(EndAddressValue).Reverse().ToArray();
-
-        /// <summary>
-        /// 数据
-        /// </summary>
-        public List<byte> Data { get; set; } = [];
-
-        /// <summary>
-        /// 档案项目（仅包含 S1-S3 的记录）
-        /// </summary>
-        public List<SRecord> SRecords { get; } = [];
-
-        /// <summary>
-        /// 根据内容刷新 SRecord 对象
-        /// </summary>
-        /// <param name="dataLength"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentOutOfRangeException"></exception>
-        /// <exception cref="Exception"></exception>
-        public List<SRecord> UpdateSRecords(int dataLength)
-        {
-            if (dataLength < 1 || dataLength > 250)
-                throw new ArgumentOutOfRangeException(nameof(dataLength));
-
-            SRecords.Clear();
-
-            var firstAddress = StartAddressValue;  // 档案的起始地址
-            var thisAddress = firstAddress;  // 档案块中正在处理的数据的地址
-            var blockData = Data.ToArray();  // 块数据的快照
-            
-            var data = new List<byte>();  // 当前档案项的数据
-            var c = blockData.Select((b, i) =>
-            {
-                data.Add(b);
-                if ((i + 1) % dataLength == 0 || (i + 1) == blockData.Length)
-                {
-                    var s = new SRecord
-                    {
-                        RecordType = SRecord.RecordTypes.S1,
-                        AddressValue = firstAddress,
-                        Data = [.. data]
-                    };
-                    if (!s.MakeThisValid())
-                        throw new Exception();
-                    SRecords.Add(s);
-                    data.Clear();
-                    firstAddress = thisAddress + 1;
-                }
-                thisAddress++;
-                return b;
-            }).Count();  // 已经处理的字节数
-
-            return SRecords;
-        }
-    }
-    #endregion 定义
-
     public SRecordFile() { }
 
     /// <summary>
@@ -117,28 +29,30 @@ public class SRecordFile
     /// <exception cref="Exception"></exception>
     public SRecordFile(string[] lines)
     {
-        SRecord.RecordTypes? recordType = null;  // 当前记录类型
-        RecordBlock? recordBlock = null;  // 当前数据组
+        SRecordTypes? recordType = null;  // 当前记录类型
+        SRecordBlock? recordBlock = null;  // 当前数据组
+        var lineNumber = 0;  // 当前行号
         foreach (string line in lines)
         {
+            lineNumber++;
             if (string.IsNullOrWhiteSpace(line)) continue;  // 跳过空行
             SRecord sRecord = new(line);
             if (!sRecord.IsValid)
-                throw new Exception("数据不符合规范！");
+                throw new Exception($"[{lineNumber}] 数据不符合规范！");
 
             switch (sRecord.RecordType)
             {
-                case SRecord.RecordTypes.S0:
+                case SRecordTypes.S0:
                     Title = Encoding.ASCII.GetString(sRecord.Data);
                     break;
-                case SRecord.RecordTypes.S1:
-                case SRecord.RecordTypes.S2:
-                case SRecord.RecordTypes.S3:
+                case SRecordTypes.S1:
+                case SRecordTypes.S2:
+                case SRecordTypes.S3:
                     recordType = sRecord.RecordType;
                     if (recordBlock == null || sRecord.AddressValue != recordBlock.NextAddressValue)  // 检查地址是否连续。
                     {
                         // 当前未设置档案块，或地址不连续：如果存在可拼接的档案块时进行拼接，否则创建新的档案块。
-                        if (RecordBlocks.FirstOrDefault(b => b.NextAddressValue == sRecord.AddressValue) is RecordBlock b)  // 尝试进行拼接
+                        if (SRecordBlocks.FirstOrDefault(b => b.NextAddressValue == sRecord.AddressValue) is SRecordBlock b)  // 尝试进行拼接
                         {
                             recordBlock = b;
                         }
@@ -148,51 +62,51 @@ public class SRecordFile
                             {
                                 StartAddressValue = sRecord.AddressValue
                             };
-                            RecordBlocks.Add(recordBlock);
+                            SRecordBlocks.Add(recordBlock);
                         }
                     }
                     recordBlock.Data.AddRange(sRecord.Data);
                     recordBlock.SRecords.Add(sRecord);
                     break;
-                case SRecord.RecordTypes.S4:
+                case SRecordTypes.S4:
                     // 预留，忽略，不做任何处理
                     break;
-                case SRecord.RecordTypes.S5:
-                case SRecord.RecordTypes.S6:
+                case SRecordTypes.S5:
+                case SRecordTypes.S6:
                     // 对记录的数量进行验证
                     var count = BitConverter.ToUInt32((new byte[4]).Concat(sRecord.Data).TakeLast(4).Reverse().ToArray());
                     var actureCount = recordBlock?.SRecords.Count ?? 0;
                     if (count != actureCount)
-                        throw new Exception($"记录标记数量 ({count}) 与实际数量 ({actureCount}) 不匹配！");
+                        throw new Exception($"[{lineNumber}] 记录标记数量 ({count}) 与实际数量 ({actureCount}) 不匹配！");
                     break;
-                case SRecord.RecordTypes.S7:
-                case SRecord.RecordTypes.S8:
-                case SRecord.RecordTypes.S9:
+                case SRecordTypes.S7:
+                case SRecordTypes.S8:
+                case SRecordTypes.S9:
                     // 对当前档案块进行验证
-                    if ((recordType == SRecord.RecordTypes.S1 && sRecord.RecordType == SRecord.RecordTypes.S9) ||
-                        (recordType == SRecord.RecordTypes.S2 && sRecord.RecordType == SRecord.RecordTypes.S8) ||
-                        (recordType == SRecord.RecordTypes.S3 && sRecord.RecordType == SRecord.RecordTypes.S7))
+                    if ((recordType == SRecordTypes.S1 && sRecord.RecordType == SRecordTypes.S9) ||
+                        (recordType == SRecordTypes.S2 && sRecord.RecordType == SRecordTypes.S8) ||
+                        (recordType == SRecordTypes.S3 && sRecord.RecordType == SRecordTypes.S7))
                     {
                         if (recordBlock == null)
                         {
-                            throw new Exception("没有档案块可进行终止操作！");
+                            throw new Exception($"[{lineNumber}] 没有档案块可进行终止操作！");
                         }
                         if (sRecord.AddressValue != 0 && sRecord.AddressValue != recordBlock.StartAddressValue)
                         {
-                            if (RecordBlocks.FirstOrDefault(rb => rb.StartAddressValue == sRecord.AddressValue) == null)
-                                throw new Exception("档案终止符标记的起始地址与实际起始地址不匹配！");
+                            if (SRecordBlocks.FirstOrDefault(rb => rb.StartAddressValue == sRecord.AddressValue) == null)
+                                throw new Exception($"[{lineNumber}] 档案终止符标记的起始地址与实际起始地址不匹配！");
                             else
-                                Debug.WriteLine("档案终止符的位置未与所属块位置连续。");
+                                Debug.WriteLine($"[{lineNumber}] 档案终止符的位置未与所属块位置连续。");
                         }
                         recordType = null;
                     }
                     else
                     {
-                        throw new Exception("档案终止符不正确！");
+                        throw new Exception($"[{lineNumber}] 档案终止符不正确！");
                     }
                     break;
                 default:
-                    throw new Exception("不支持的记录类型！");
+                    throw new Exception($"[{lineNumber}] 不支持的记录类型！");
             }
         }
     }
@@ -205,7 +119,7 @@ public class SRecordFile
     /// <summary>
     /// 所有档案块
     /// </summary>
-    public List<RecordBlock> RecordBlocks { get; set; } = [];
+    public List<SRecordBlock> SRecordBlocks { get; set; } = [];
 
     /// <summary>
     /// 转换为 ASCII 文本行
@@ -226,7 +140,7 @@ public class SRecordFile
         {
             var s = new SRecord()
             {
-                RecordType = SRecord.RecordTypes.S0,
+                RecordType = SRecordTypes.S0,
                 Data = Encoding.ASCII.GetBytes(Title),
             };
             if (!s.MakeThisValid())
@@ -234,7 +148,7 @@ public class SRecordFile
             lines.Add(s.AsciiText);
         }
 
-        foreach (var block in RecordBlocks)
+        foreach (var block in SRecordBlocks)
         {
             var records = block.UpdateSRecords(dataLength);
             lines.AddRange(records.Select(r => r.AsciiText));
@@ -243,7 +157,7 @@ public class SRecordFile
             {
                 var s = new SRecord
                 {
-                    RecordType = SRecord.RecordTypes.S5,
+                    RecordType = SRecordTypes.S5,
                     Data = BitConverter.GetBytes(records.Count).Reverse().ToArray()
                 };
                 if (!s.MakeThisValid())
@@ -255,7 +169,7 @@ public class SRecordFile
             {
                 var s = new SRecord
                 {
-                    RecordType = SRecord.RecordTypes.S9,
+                    RecordType = SRecordTypes.S9,
                     AddressValue = block.StartAddressValue
                 };
                 if (!s.MakeThisValid())

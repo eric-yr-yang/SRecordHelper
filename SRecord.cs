@@ -22,6 +22,7 @@ public class SRecord
     /// </summary>
     /// <param name="text"></param>
     /// <param name="addressLength"></param>
+    /// <param name="hasData">是否有数据字段</param>
     [AttributeUsage(AttributeTargets.Field)]
     public class SRecordInfoAttribute(string text, int addressLength, bool hasData = false) : Attribute
     {
@@ -35,43 +36,10 @@ public class SRecord
         /// </summary>
         public int AddressLength { get; set; } = addressLength;
 
+        /// <summary>
+        /// 是否有数据字段
+        /// </summary>
         public bool HasData { get; set; } = hasData;
-    }
-
-    /// <summary>
-    /// 档案类型
-    /// </summary>
-    public enum RecordTypes : byte
-    {
-        [SRecordInfo("S0", 2, true)]
-        S0 = 0,
-
-        [SRecordInfo("S1", 2, true)]
-        S1 = 1,
-
-        [SRecordInfo("S2", 3, true)]
-        S2 = 2,
-
-        [SRecordInfo("S3", 4, true)]
-        S3 = 3,
-
-        [SRecordInfo("S4", 0)]
-        S4 = 4,
-
-        [SRecordInfo("S5", 0, true)]
-        S5 = 5,
-
-        [SRecordInfo("S6", 0, true)]
-        S6 = 6,
-
-        [SRecordInfo("S7", 4)]
-        S7 = 7,
-
-        [SRecordInfo("S8", 3)]
-        S8 = 8,
-
-        [SRecordInfo("S9", 2)]
-        S9 = 9
     }
     #endregion 定义
 
@@ -82,7 +50,7 @@ public class SRecord
     /// <param name="recordType"></param>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public static string GetRecordTypeName(RecordTypes recordType)
+    public static string GetRecordTypeName(SRecordTypes recordType)
     {
         if (recordType.GetType().GetField(recordType.ToString())!.GetCustomAttribute(typeof(SRecordInfoAttribute)) is SRecordInfoAttribute sRecordInfoAttribute)
             return sRecordInfoAttribute.Name;
@@ -95,10 +63,10 @@ public class SRecord
     /// <param name="recordTypeName"></param>
     /// <returns></returns>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    public static RecordTypes GetRecordTypeByName(string recordTypeName)
+    public static SRecordTypes GetRecordTypeByName(string recordTypeName)
     {
         recordTypeName = recordTypeName.Trim().ToUpper();
-        var recordType = typeof(RecordTypes).GetFields().FirstOrDefault(field =>
+        var recordType = typeof(SRecordTypes).GetFields().FirstOrDefault(field =>
         {
             if (field.GetCustomAttribute(typeof(SRecordInfoAttribute)) is SRecordInfoAttribute sRecordInfoAttribute)
             {
@@ -108,7 +76,7 @@ public class SRecord
         });
         if (recordType != null)
         {
-            return (RecordTypes)recordType.GetValue(null)!;
+            return (SRecordTypes)recordType.GetValue(null)!;
         }
         throw new ArgumentOutOfRangeException(nameof(recordTypeName));
     }
@@ -129,6 +97,13 @@ public class SRecord
         return (byte)sum;
     }
 
+    /// <summary>
+    /// 提取数据中的有效字节长度（移除前导 0）
+    /// </summary>
+    /// <param name="rawData"></param>
+    /// <param name="newData"></param>
+    /// <param name="minLength">最低保留字节数</param>
+    /// <returns></returns>
     public static int ValidByteLength(byte[] rawData, out byte[] newData, int minLength = 2)
     {
         var data = Convert.ToHexString(rawData);
@@ -144,7 +119,7 @@ public class SRecord
     /// <param name="address"></param>
     /// <param name="newAddress"></param>
     /// <returns></returns>
-    public static RecordTypes GetSuitRecordTypeForAddress(byte[] address, out byte[] newAddress)
+    public static SRecordTypes GetSuitRecordTypeForAddress(byte[] address, out byte[] newAddress)
     {
         var addr = Convert.ToHexString(address);
         while (addr.StartsWith('0')) addr = addr[1..];
@@ -152,21 +127,24 @@ public class SRecord
         if (c < 2)
         {
             newAddress = address[^2..];
-            return RecordTypes.S1;
+            return SRecordTypes.S1;
         }
         else if (c < 3)
         {
             newAddress = address[^3..];
-            return RecordTypes.S2;
+            return SRecordTypes.S2;
         }
         else
         {
             newAddress = address;
-            return RecordTypes.S3;
+            return SRecordTypes.S3;
         }
     }
     #endregion 静态
 
+    /// <summary>
+    /// 
+    /// </summary>
     public SRecord() { }
 
     /// <summary>
@@ -186,7 +164,7 @@ public class SRecord
     /// <summary>
     /// 档案类型
     /// </summary>
-    public RecordTypes RecordType { get; set; }
+    public SRecordTypes RecordType { get; set; }
 
     /// <summary>
     /// 字节长度（地址 + 数据 + 校验和）
@@ -320,30 +298,30 @@ public class SRecord
     /// <returns></returns>
     public bool MakeThisValid()
     {
-        if (RecordType == RecordTypes.S0 && AddressValue == 0)
+        if (RecordType == SRecordTypes.S0 && AddressValue == 0)
         {
             Address = new byte[AddressLength];
         }
-        else if (new[] { RecordTypes.S1, RecordTypes.S2, RecordTypes.S3 }.Contains(RecordType))
+        else if (new[] { SRecordTypes.S1, SRecordTypes.S2, SRecordTypes.S3 }.Contains(RecordType))
         {
             RecordType = GetSuitRecordTypeForAddress(Address, out var newAddress);
             Address = newAddress;
         }
-        else if (new[] { RecordTypes.S7, RecordTypes.S8, RecordTypes.S9 }.Contains(RecordType))
+        else if (new[] { SRecordTypes.S7, SRecordTypes.S8, SRecordTypes.S9 }.Contains(RecordType))
         {
             _ = GetSuitRecordTypeForAddress(Address, out var newAddress);
             Address = newAddress;
             Data = [];
         }
-        else if (new[] { RecordTypes.S5, RecordTypes.S6 }.Contains(RecordType))
+        else if (new[] { SRecordTypes.S5, SRecordTypes.S6 }.Contains(RecordType))
         {
             Address = [];
             var l = ValidByteLength(Data, out var newData, minLength: 2);
             Data = newData;
             RecordType = l switch
             {
-                2 => RecordTypes.S5,
-                3 => RecordTypes.S6,
+                2 => SRecordTypes.S5,
+                3 => SRecordTypes.S6,
                 _ => throw new Exception(),
             };
         }
