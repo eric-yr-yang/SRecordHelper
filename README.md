@@ -54,7 +54,7 @@ string[] lines = sample.Replace("\r\n", "\n").Split("\n");  // 按照换行符�
 SRecordFile sRecordFile = new SRecordFile(lines);  // 使用行序列创建 SRecordFile 对象（构造时会进行验证，验证不通过时会抛出异常）
 SRecordBlock sRecordBlock = sRecordFile.SRecordBlocks[1];  // 获取第一个档案块对象
 uint startAddress = sRecordBlock.StartAddressValue;  // 档案块对象的地址
-byte[] data = sRecordBlock.Data;  // 获取档案块数据
+byte[] data = [.. sRecordBlock.Data];  // 获取档案块数据
 
 var newLines = sRecordFile.ToSRecordTextLines(0x20);  // 从 SRecordFile 对象导出行序列
 
