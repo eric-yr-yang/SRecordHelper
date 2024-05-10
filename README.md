@@ -49,7 +49,7 @@ string sample = """
     S9030000FC
     """;  // 示例文件
 // string sample = File.ReadAllText(@"ECU.s37");  // 读取文件
-string[] lines = sample3.Replace("\r\n", "\n").Split("\n");  // 按照换行符分割为行序列
+string[] lines = sample.Replace("\r\n", "\n").Split("\n");  // 按照换行符分割为行序列
 
 SRecordFile sRecordFile = new SRecordFile(lines);  // 使用行序列创建 SRecordFile 对象（构造时会进行验证，验证不通过时会抛出异常）
 SRecordBlock sRecordBlock = sRecordFile.SRecordBlocks[1];  // 获取第一个档案块对象

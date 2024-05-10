@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <Version>0.1.1.0</Version>
+    <Version>0.1.1.1</Version>
     <Authors>yaru.yang@outlook.com</Authors>
     <PackageTags>srec, s-record, srecord, s37, s28, s19</PackageTags>
     <Title>Motorola S-record 格式文件助手</Title>
